@@ -1,0 +1,49 @@
+services:
+  db:
+    # pgvector-enabled Postgres (drop-in for postgres:16-alpine; same data dir
+    # and volume). Powers the canonical_claims embedding column + ANN search.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: deepfield
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d deepfield"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    # Load API keys straight from .env into the container. This bypasses
+    # compose's ${VAR} interpolation, which gives the (possibly empty) shell
+    # environment precedence over .env and can clobber a real key.
+    env_file:
+      - .env
+    environment:
+      # Overrides the .env DATABASE_URL (which points at localhost) so the
+      # container reaches Postgres via the compose service name.
+      DATABASE_URL: postgresql://user:password@db:5432/deepfield
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # The browser talks to the backend on the host, so use localhost.
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
