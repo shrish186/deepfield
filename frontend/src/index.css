@@ -1,0 +1,185 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, sans-serif;
+  background: #06070b;
+  color: #e7e9ee;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Ambient background: layered radial glows + faint grid. Fixed so it doesn't
+   scroll with content. */
+.app-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(60% 50% at 15% 0%, rgba(124, 108, 255, 0.18), transparent 60%),
+    radial-gradient(50% 50% at 90% 10%, rgba(56, 232, 255, 0.12), transparent 55%),
+    radial-gradient(60% 60% at 50% 110%, rgba(124, 108, 255, 0.1), transparent 60%);
+  pointer-events: none;
+}
+
+.app-bg::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(circle at 50% 30%, black, transparent 75%);
+  pointer-events: none;
+}
+
+/* Gradient text helper */
+.text-gradient {
+  background: linear-gradient(110deg, #fff 10%, #c7c0ff 40%, #7c6cff 70%, #38e8ff 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Glass panel */
+.glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+/* Animated gradient border (used on the live feed while streaming) */
+.gradient-ring {
+  position: relative;
+}
+.gradient-ring::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(120deg, rgba(124, 108, 255, 0.7), rgba(56, 232, 255, 0.5), rgba(124, 108, 255, 0.7));
+  background-size: 200% 200%;
+  animation: shimmer 6s linear infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Scrollbars */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 108, 255, 0.4);
+  background-clip: content-box;
+}
+
+/* Markdown rendering inside report sections */
+.prose-deepfield {
+  line-height: 1.7;
+}
+.prose-deepfield a {
+  color: #7c9bff;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(124, 155, 255, 0.4);
+}
+.prose-deepfield a:hover {
+  border-bottom-color: rgba(124, 155, 255, 0.9);
+}
+.prose-deepfield ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.5rem 0;
+}
+.prose-deepfield li {
+  position: relative;
+  padding-left: 1.25rem;
+  margin: 0.35rem 0;
+}
+.prose-deepfield li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(120deg, #7c6cff, #38e8ff);
+}
+.prose-deepfield p {
+  margin: 0.5rem 0;
+}
+.prose-deepfield strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ---- Print / Export-to-PDF -------------------------------------------------
+   window.print() doubles as "export report as PDF". Strip the dark chrome,
+   sidebar, and interactive controls so the printed page is a clean, readable
+   document. Anything marked .no-print is interactive-only and dropped. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  aside {
+    display: none !important;
+  }
+  html,
+  body,
+  #root {
+    height: auto !important;
+    background: #fff !important;
+  }
+  body {
+    color: #111 !important;
+  }
+  .app-bg,
+  .glass {
+    background: #fff !important;
+    box-shadow: none !important;
+    border-color: #ddd !important;
+  }
+  .text-white\/80,
+  .text-white\/90,
+  .prose-deepfield,
+  .prose-deepfield strong {
+    color: #111 !important;
+  }
+  .text-gradient {
+    -webkit-text-fill-color: #111 !important;
+    color: #111 !important;
+  }
+  section,
+  .glass {
+    break-inside: avoid;
+  }
+}
