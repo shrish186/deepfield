@@ -5,7 +5,6 @@ import QueryInput from "./components/QueryInput";
 import Turn from "./components/Turn";
 import GraphExplorer from "./components/GraphExplorer";
 import AuthView from "./components/AuthView";
-import PricingView from "./components/PricingView";
 import { useAuth } from "./hooks/useAuth";
 import { createReport, getThread, getReport, listThreads, getUsage } from "./api";
 
@@ -16,13 +15,12 @@ const EXAMPLES = [
   "What does the evidence say about microdosing psychedelics?",
 ];
 
-// Map the URL hash to a top-level "page" for the auth/pricing flows. Research
-// and the deep-link #/report/{id} handling stay exactly as before.
+// Map the URL hash to a top-level "page" for the auth flows. Research and the
+// deep-link #/report/{id} handling stay exactly as before.
 function pageFromHash() {
   const h = window.location.hash;
   if (h.startsWith("#/login")) return "login";
   if (h.startsWith("#/signup")) return "signup";
-  if (h.startsWith("#/pricing")) return "pricing";
   return null;
 }
 
@@ -30,7 +28,7 @@ export default function App() {
   const auth = useAuth();
   const [page, setPage] = useState(pageFromHash);
   const [usage, setUsage] = useState(null); // { plan, used, limit, remaining }
-  const [paywalled, setPaywalled] = useState(false);
+  const [limited, setLimited] = useState(false);
   const [threadId, setThreadId] = useState(null);
   const [turns, setTurns] = useState([]); // [{ id, query, status }]
   const [submitting, setSubmitting] = useState(false);
@@ -67,7 +65,7 @@ export default function App() {
     refreshThreads();
   }, [refreshThreads]);
 
-  // Keep the auth/pricing page in sync with the URL hash.
+  // Keep the auth page in sync with the URL hash.
   useEffect(() => {
     const onHash = () => setPage(pageFromHash());
     window.addEventListener("hashchange", onHash);
@@ -95,21 +93,6 @@ export default function App() {
     window.location.hash = hash;
   };
 
-  // Pricing CTA: gate Subscribe behind an account, then defer to Stripe (later).
-  const handleSelectPlan = (plan) => {
-    if (plan.id === "free") {
-      goto(auth.user ? "" : "#/signup");
-      return;
-    }
-    if (!auth.user) {
-      goto("#/signup");
-      return;
-    }
-    setError(
-      `Stripe checkout for the ${plan.name} plan is coming soon — your account is ready for it.`
-    );
-    goto("");
-  };
 
   // Deep-link support: a shared link of the form #/report/{id} opens the thread
   // that report belongs to. Lets researchers paste a report URL to a teammate.
@@ -159,7 +142,7 @@ export default function App() {
       return;
     }
     setError(null);
-    setPaywalled(false);
+    setLimited(false);
     setSubmitting(true);
     const useMode = opts.mode ?? mode;
     const useScope = opts.sourceScope ?? sourceScope;
@@ -192,8 +175,8 @@ export default function App() {
       // A deep run just consumed a credit — refresh the remaining count.
       if ((report.mode || useMode) === "deep") refreshUsage();
     } catch (e) {
-      if (e.paywall) {
-        setPaywalled(true);
+      if (e.limited) {
+        setLimited(true);
         setError(e.message);
       } else {
         setError(e.message);
@@ -267,7 +250,7 @@ export default function App() {
     }
   };
 
-  // ---------- Auth & pricing pages (full-screen, hash-routed) ----------
+  // ---------- Auth pages (full-screen, hash-routed) ----------
   if (page === "login" || page === "signup") {
     return (
       <div className="app-bg min-h-full">
@@ -281,17 +264,10 @@ export default function App() {
       </div>
     );
   }
-  if (page === "pricing") {
-    return (
-      <div className="app-bg min-h-full">
-        <PricingView user={auth.user} onSelectPlan={handleSelectPlan} />
-      </div>
-    );
-  }
 
   // ---------- Hard gate: an account is required to use the research app ------
-  // Pricing/login/signup above stay reachable while signed out; everything else
-  // funnels through signup. The app is no longer open to anonymous visitors.
+  // Login/signup above stay reachable while signed out; everything else funnels
+  // through signup. The app is not open to anonymous visitors.
   if (!auth.user) {
     return (
       <div className="app-bg min-h-full">
@@ -301,31 +277,22 @@ export default function App() {
           onLogin={auth.login}
           onSignup={auth.signup}
           onSwitch={(m) => goto(m === "signup" ? "#/signup" : "#/login")}
-          onViewPricing={() => goto("#/pricing")}
         />
       </div>
     );
   }
 
-  // Shared error/paywall banner. When the 402 paywall fires we switch to an
-  // amber upsell with a direct route to pricing, instead of a red error.
+  // Shared notice banner. A usage-cap hit (429) shows a neutral amber notice;
+  // any other error shows red.
   const banner = error ? (
     <div
       className={`rounded-xl border p-3 text-sm ${
-        paywalled
+        limited
           ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
           : "border-rose-500/30 bg-rose-500/10 text-rose-200"
       }`}
     >
       <div>{error}</div>
-      {paywalled && (
-        <button
-          onClick={() => goto("#/pricing")}
-          className="mt-2 inline-flex rounded-lg bg-gradient-to-r from-accent to-accent-cyan px-3 py-1.5 text-[13px] font-semibold text-white shadow-glow transition hover:brightness-110"
-        >
-          Upgrade to Pro →
-        </button>
-      )}
     </div>
   ) : null;
 
@@ -343,7 +310,6 @@ export default function App() {
         onLogin={() => goto("#/login")}
         onSignup={() => goto("#/signup")}
         onLogout={auth.logout}
-        onOpenPricing={() => goto("#/pricing")}
       />
 
       <main className="flex-1 min-w-0">

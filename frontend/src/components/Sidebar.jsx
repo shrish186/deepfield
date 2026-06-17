@@ -29,7 +29,6 @@ export default function Sidebar({
   onLogin,
   onSignup,
   onLogout,
-  onOpenPricing,
 }) {
   const [historyQuery, setHistoryQuery] = useState("");
   const q = historyQuery.trim().toLowerCase();
@@ -116,14 +115,6 @@ export default function Sidebar({
       <div className="mt-auto space-y-3 px-1">
         <div className="h-px bg-white/8" />
 
-        <button
-          onClick={onOpenPricing}
-          className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-sm text-white/70 transition-colors hover:bg-white/5 hover:text-white"
-        >
-          <span className="text-[15px] leading-none">✨</span>
-          Pricing & plans
-        </button>
-
         {user ? (
           <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5">
             <div className="flex items-center gap-2.5">
@@ -168,12 +159,9 @@ export default function Sidebar({
                     />
                   </div>
                   {usage.remaining === 0 && (
-                    <button
-                      onClick={onOpenPricing}
-                      className="mt-2 w-full rounded-md bg-gradient-to-r from-accent to-accent-cyan px-2 py-1 text-[11.5px] font-semibold text-white"
-                    >
-                      Upgrade for unlimited →
-                    </button>
+                    <div className="mt-2 text-[11px] leading-snug text-white/45">
+                      Resets on the 1st.
+                    </div>
                   )}
                 </div>
               )

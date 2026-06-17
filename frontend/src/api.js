@@ -31,10 +31,10 @@ export async function createReport(query, opts = {}) {
     err.code = 401;
     throw err;
   }
-  if (res.status === 402) {
-    // Out of free deep runs — surface the backend's upgrade message + a flag the
-    // UI uses to show the upgrade CTA instead of a generic error.
-    let detail = "You've reached your free deep-run limit this month.";
+  if (res.status === 429) {
+    // Usage cap reached (per-user monthly or global daily). Surface the
+    // backend's message and flag it so the UI shows a neutral notice.
+    let detail = "You've reached your deep-research limit. Please try again later.";
     try {
       const body = await res.json();
       if (typeof body?.detail === "string") detail = body.detail;
@@ -42,8 +42,8 @@ export async function createReport(query, opts = {}) {
       /* ignore */
     }
     const err = new Error(detail);
-    err.code = 402;
-    err.paywall = true;
+    err.code = 429;
+    err.limited = true;
     throw err;
   }
   if (!res.ok) throw new Error(`createReport failed: ${res.status}`);

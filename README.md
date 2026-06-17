@@ -64,7 +64,7 @@ A research request kicks off a **LangGraph** state machine. Each node streams it
 - **Agents** — a layered pipeline (`backend/agents/layer*.py`) orchestrated by LangGraph (`backend/pipeline/graph.py`). Web + academic source connectors (arXiv / Semantic Scholar / PubMed), credibility scoring, and claim extraction.
 - **Knowledge graph** — `canonical_claims` (with 1024-dim embeddings + ANN index), `claim_evidence`, and `claim_links` (contradiction edges). Deduplication via Voyage embeddings + pgvector cosine similarity.
 - **Realtime** — WebSocket broadcast of every agent log line to the client.
-- **Auth & billing** — JWT (bcrypt) auth; account-gated usage with monthly deep-run credits (free tier capped, returns HTTP 402 before spending any compute).
+- **Auth & cost control** — JWT (bcrypt) auth; the app is account-gated, and deep runs are capped both **per-user-per-month** and by a **global daily ceiling** (the hard spend backstop). Caps are checked before any pipeline spawns, so a blocked run costs nothing.
 - **Performance** — Anthropic prompt caching on the shared per-source system prompt (paid once, read from cache thereafter) and a token-bucket rate limiter sized to the API tier to avoid 429s.
 - **Frontend** — React + Vite + Tailwind, hash-routed, with a live agent feed, report view, and a read-only graph explorer.
 
@@ -126,7 +126,7 @@ Interactive docs at `/docs`. A few of the endpoints:
 | `POST` | `/reports` | Start a research run (deep or basic) |
 | `GET` | `/reports/{id}` | Full report (answer, sources, conflicts, gaps) |
 | `GET` | `/reports/{id}/citations` | Export citations (APA / MLA / BibTeX) |
-| `GET` | `/usage` | Remaining monthly deep-run credits |
+| `GET` | `/usage` | Remaining monthly deep-run allowance |
 | `GET` | `/graph/disagreements` | Top contested claims across all reports |
 | `GET` | `/graph/claims/{id}` | A claim, its evidence, and its evolution over time |
 | `WS` | `/ws/reports/{id}` | Live agent progress stream |
@@ -143,7 +143,7 @@ backend/
   db/            # SQLAlchemy models + async engine / schema init
   tests/         # pytest suites
 frontend/
-  src/components # React UI (agent feed, report view, graph explorer, auth, pricing)
+  src/components # React UI (agent feed, report view, graph explorer, auth)
   src/hooks      # auth + websocket hooks
 docker-compose.yml
 ```
@@ -160,13 +160,26 @@ pytest
 
 ---
 
+## Deploying
+
+See **[DEPLOY.md](DEPLOY.md)** for a step-by-step Railway deployment (database +
+backend + frontend). Before going live, set:
+
+- `JWT_SECRET` (required in production), `DEEPFIELD_ENV=production`
+- `ALLOWED_ORIGINS` to your frontend URL
+- `DEEPFIELD_GLOBAL_DAILY_DEEP_RUNS` to your daily spend ceiling
+
+…and set spend limits in the Anthropic and Tavily dashboards as an independent backstop.
+
+---
+
 ## Status & roadmap
 
 This is a working, end-to-end build. Known next steps:
 
-- **Payments** — the pricing page and credit-gating are wired; Stripe-hosted checkout is the next integration (no card data is ever handled by this backend).
 - **Scale** — the pipeline currently runs in-process; a background worker queue is the path to concurrent load.
 - **Evaluation** — the claim-merge similarity threshold is a tuned constant; precision/recall evaluation is planned.
+- **Monetization** — usage caps are in place purely for cost control; a paid tier (e.g. Stripe-hosted checkout, no card data handled by this backend) is a deliberate later step.
 
 ---
 

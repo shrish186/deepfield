@@ -10,7 +10,6 @@ export default function AuthView({
   onSwitch,
   onClose,
   gated = false,
-  onViewPricing,
 }) {
   const isSignup = mode === "signup";
   const [name, setName] = useState("");
@@ -116,14 +115,7 @@ export default function AuthView({
         </p>
       </div>
 
-      {gated ? (
-        <button
-          onClick={() => onViewPricing?.()}
-          className="mt-6 text-[13px] text-white/40 transition hover:text-white/70"
-        >
-          See pricing & plans →
-        </button>
-      ) : (
+      {!gated && (
         <button
           onClick={() => (window.location.hash = "")}
           className="mt-6 text-[13px] text-white/40 transition hover:text-white/70"
