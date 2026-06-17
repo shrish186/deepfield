@@ -6,13 +6,22 @@ import Turn from "./components/Turn";
 import GraphExplorer from "./components/GraphExplorer";
 import AuthView from "./components/AuthView";
 import { useAuth } from "./hooks/useAuth";
-import { createReport, getThread, getReport, listThreads, getUsage } from "./api";
+import {
+  createReport,
+  getThread,
+  getReport,
+  listThreads,
+  getUsage,
+  getDisagreements,
+} from "./api";
 
+// Deliberately contested questions — topics where credible sources genuinely
+// disagree, so the conflict-surfacing pipeline has something to show off.
 const EXAMPLES = [
-  "How will AI affect the workplace in the future?",
-  "What are the long-term health effects of intermittent fasting?",
-  "Is nuclear energy a viable path to decarbonization?",
-  "What does the evidence say about microdosing psychedelics?",
+  "Does creatine damage kidney function?",
+  "Is moderate alcohol consumption actually safe?",
+  "Do seed oils cause chronic inflammation?",
+  "Does intermittent fasting beat plain calorie counting?",
 ];
 
 // Map the URL hash to a top-level "page" for the auth flows. Research and the
@@ -29,6 +38,7 @@ export default function App() {
   const [page, setPage] = useState(pageFromHash);
   const [usage, setUsage] = useState(null); // { plan, used, limit, remaining }
   const [limited, setLimited] = useState(false);
+  const [contested, setContested] = useState([]); // top graph disagreements for the hero
   const [threadId, setThreadId] = useState(null);
   const [turns, setTurns] = useState([]); // [{ id, query, status }]
   const [submitting, setSubmitting] = useState(false);
@@ -70,6 +80,18 @@ export default function App() {
   useEffect(() => {
     refreshThreads();
   }, [refreshThreads]);
+
+  // Pull the most-contested claims from the accumulated graph to seed the hero.
+  // Fail-soft: if the graph is empty or the call fails, the section just hides.
+  useEffect(() => {
+    let alive = true;
+    getDisagreements(2)
+      .then((d) => alive && setContested(Array.isArray(d) ? d.slice(0, 2) : []))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Keep the auth page in sync with the URL hash.
   useEffect(() => {
@@ -323,12 +345,12 @@ export default function App() {
           <GraphExplorer />
         ) : !started ? (
           // ---------- Empty / hero state ----------
-          <div className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center px-5 py-16">
+          <div className="mx-auto flex min-h-screen max-w-3xl flex-col items-center px-5 pb-16 pt-[13vh]">
             <div className="mb-6 animate-float">
               <Logo size={52} />
             </div>
-            <h1 className="text-center text-4xl sm:text-5xl font-extrabold tracking-tight">
-              <span className="text-gradient">Research starts deeper.</span>
+            <h1 className="text-center text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
+              Research starts <span className="text-accent-cyan">deeper.</span>
             </h1>
             <p className="mt-4 mb-10 max-w-xl text-center text-[15px] leading-relaxed text-white/55">
               Five layers of agents sweep the web, read every source, cross-reference
@@ -352,20 +374,58 @@ export default function App() {
 
             {banner && <div className="mt-4 w-full">{banner}</div>}
 
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-              {EXAMPLES.map((ex) => (
-                <button
-                  key={ex}
-                  onClick={() => {
-                    setQuery(ex);
-                    submit(ex);
-                  }}
-                  className="rounded-full border border-white/10 bg-white/[0.03] px-3.5 py-1.5 text-[12.5px] text-white/60 transition hover:border-accent/40 hover:text-white hover:bg-white/[0.06]"
-                >
-                  {ex}
-                </button>
-              ))}
+            <div className="mt-6 w-full">
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-white/35">
+                Try a contested question
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {EXAMPLES.map((ex) => (
+                  <button
+                    key={ex}
+                    onClick={() => {
+                      setQuery(ex);
+                      submit(ex);
+                    }}
+                    className="rounded-full border border-white/10 bg-white/[0.03] px-3.5 py-1.5 text-[12.5px] text-white/60 transition hover:border-accent/40 hover:bg-white/[0.06] hover:text-white"
+                  >
+                    {ex}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {contested.length > 0 && (
+              <div className="mt-10 w-full">
+                <button
+                  onClick={() => setView("graph")}
+                  className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-white/35 transition hover:text-white/60"
+                >
+                  Most contested in the research graph
+                  <span aria-hidden>→</span>
+                </button>
+                <div className="space-y-2">
+                  {contested.map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={() => setView("graph")}
+                      className="block w-full rounded-xl border border-white/8 bg-white/[0.02] p-3 text-left transition hover:border-amber-400/25 hover:bg-white/[0.04]"
+                    >
+                      <div className="flex items-start gap-2 text-[13px] leading-snug text-white/75">
+                        <span className="line-clamp-2 flex-1">{d.claim_a?.statement}</span>
+                        <span className="mt-0.5 shrink-0 text-[10px] font-semibold uppercase text-amber-300/80">
+                          vs
+                        </span>
+                        <span className="line-clamp-2 flex-1">{d.claim_b?.statement}</span>
+                      </div>
+                      <div className="mt-1.5 text-[11px] text-amber-200/60">
+                        independently observed across {d.observed_count} report
+                        {d.observed_count === 1 ? "" : "s"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           // ---------- Active conversation ----------
