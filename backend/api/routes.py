@@ -38,22 +38,40 @@ from pipeline.graph import run_pipeline
 router = APIRouter()
 
 
-# ---- Credits / usage gate --------------------------------------------------
-# Free accounts get a small monthly allowance of DEEP runs (the expensive
-# 5-layer chain). Basic and chat answers are always free. Paid plans are
-# unlimited. The allowance resets at the start of each calendar month (UTC).
+# ---- Usage caps (cost control) --------------------------------------------
+# Two independent limits guard against runaway API spend on DEEP runs (the
+# expensive multi-layer chain). Basic and chat answers are unmetered.
+#
+#   1. Per-user monthly cap — each account gets a fixed allowance that resets
+#      on the 1st (UTC). Stops any single user from draining the budget.
+#   2. Global daily ceiling — a hard cap on total deep runs across ALL users
+#      per day. This is the wallet protector: even if someone scripts a flood
+#      of accounts, the app stops spending once the daily ceiling is hit.
+#
+# Both are env-tunable. A value <= 0 disables that limit.
 FREE_DEEP_RUNS_PER_MONTH = int(os.getenv("DEEPFIELD_FREE_DEEP_RUNS", "3"))
+_GLOBAL_DAILY = int(os.getenv("DEEPFIELD_GLOBAL_DAILY_DEEP_RUNS", "50"))
+GLOBAL_DAILY_DEEP_RUNS: Optional[int] = _GLOBAL_DAILY if _GLOBAL_DAILY > 0 else None
+
+# Accounts on these plans skip the *per-user* cap (the owner can self-grant by
+# setting their plan in the DB). The global daily ceiling still applies to
+# everyone — it is the absolute spend backstop.
 UNLIMITED_PLANS = {"pro", "team"}
 
 
 def _deep_limit(plan: str) -> Optional[int]:
-    """Monthly deep-run cap for a plan; None means unlimited."""
+    """Monthly per-user deep-run cap for a plan; None means uncapped."""
     return None if plan in UNLIMITED_PLANS else FREE_DEEP_RUNS_PER_MONTH
 
 
 def _month_start() -> datetime:
     now = datetime.now(timezone.utc)
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def _day_start() -> datetime:
+    now = datetime.now(timezone.utc)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 async def _deep_runs_this_month(session: AsyncSession, user_id: int) -> int:
@@ -63,6 +81,17 @@ async def _deep_runs_this_month(session: AsyncSession, user_id: int) -> int:
                 Report.user_id == user_id,
                 Report.mode == "deep",
                 Report.created_at >= _month_start(),
+            )
+        )
+    ).scalar_one()
+
+
+async def _global_deep_runs_today(session: AsyncSession) -> int:
+    return (
+        await session.execute(
+            select(func.count(Report.id)).where(
+                Report.mode == "deep",
+                Report.created_at >= _day_start(),
             )
         )
     ).scalar_one()
@@ -220,19 +249,30 @@ async def create_report(
     mode = payload.mode if payload.mode in ("deep", "basic", "chat") else "deep"
     source_scope = normalise_scope(payload.source_scope)
 
-    # Credit gate: free plans are capped on DEEP runs per month. 402 Payment
-    # Required signals the frontend to surface the upgrade path. Basic/chat are
-    # unmetered, so they fall straight through.
+    # Usage gate (cost control): DEEP runs are capped per-user-per-month and by
+    # a global daily ceiling. Both return 429 (a quota limit, not a payment
+    # wall). Basic/chat are unmetered and fall straight through. Checked before
+    # any pipeline spawns, so a blocked run costs nothing.
     if mode == "deep":
         limit = _deep_limit(user.plan)
         if limit is not None:
             used = await _deep_runs_this_month(session, user.id)
             if used >= limit:
                 raise HTTPException(
-                    status_code=402,
+                    status_code=429,
                     detail=(
-                        f"You've used all {limit} free deep research runs this month. "
-                        "Upgrade to Pro for unlimited deep research."
+                        f"You've reached your monthly limit of {limit} deep research "
+                        "runs. Your allowance resets on the 1st."
+                    ),
+                )
+        if GLOBAL_DAILY_DEEP_RUNS is not None:
+            today = await _global_deep_runs_today(session)
+            if today >= GLOBAL_DAILY_DEEP_RUNS:
+                raise HTTPException(
+                    status_code=429,
+                    detail=(
+                        "Deepfield has reached today's research capacity. "
+                        "Please try again tomorrow."
                     ),
                 )
 

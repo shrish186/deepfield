@@ -16,7 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 import api.routes as routes
+from api.auth import hash_password, require_user
 from db.database import Base, get_session
+from db.models import User
 
 
 @pytest_asyncio.fixture
@@ -38,7 +40,23 @@ async def session_factory(engine):
 
 
 @pytest_asyncio.fixture
-async def client(session_factory, monkeypatch):
+async def test_user(session_factory):
+    """A persisted account that the authed endpoints run as."""
+    async with session_factory() as session:
+        user = User(
+            email="tester@example.com",
+            password_hash=hash_password("password123"),
+            name="Tester",
+            plan="free",
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+
+@pytest_asyncio.fixture
+async def client(session_factory, test_user, monkeypatch):
     # Inert pipeline: the background task runs but does nothing.
     async def _noop_pipeline(*args, **kwargs):
         return None
@@ -52,6 +70,8 @@ async def client(session_factory, monkeypatch):
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[get_session] = _override_get_session
+    # Authed endpoints (POST /reports, /usage) run as the seeded test user.
+    app.dependency_overrides[require_user] = lambda: test_user
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

@@ -1,6 +1,7 @@
 """Deepfield — FastAPI application entrypoint."""
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -53,10 +54,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Deepfield", version="1.0.0", lifespan=lifespan)
 
+# CORS: in production set ALLOWED_ORIGINS to a comma-separated list of the
+# frontend origin(s), e.g. "https://deepfield.up.railway.app". When it's unset
+# (local dev) we fall back to "*". Auth uses a Bearer header, not cookies, so we
+# don't need credentialed CORS — keeping allow_credentials=False also lets the
+# "*" dev fallback stay spec-compliant.
+_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
+_allowed_origins = (
+    [o.strip() for o in _origins_env.split(",") if o.strip()] if _origins_env else ["*"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

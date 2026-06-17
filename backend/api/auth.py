@@ -33,12 +33,22 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _ALGORITHM = "HS256"
 _TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7  # 7 days
 
-# Secret resolution: prefer the env var; otherwise a per-process random secret.
-_JWT_SECRET = os.getenv("JWT_SECRET") or secrets.token_urlsafe(48)
-if not os.getenv("JWT_SECRET"):  # pragma: no cover - startup notice only
-    print(
+# Secret resolution: prefer the env var. In production (DEEPFIELD_ENV=production)
+# a missing JWT_SECRET is a hard error — without a stable secret every restart
+# would silently invalidate all sessions. In development we fall back to a
+# per-process random secret and just log a notice.
+_JWT_SECRET = os.getenv("JWT_SECRET")
+if not _JWT_SECRET:
+    if os.getenv("DEEPFIELD_ENV", "development").lower() == "production":
+        raise RuntimeError(
+            "JWT_SECRET must be set in production. Generate one with "
+            "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"` "
+            "and set it as an environment variable."
+        )
+    _JWT_SECRET = secrets.token_urlsafe(48)
+    print(  # pragma: no cover - startup notice only
         "[auth] JWT_SECRET not set — using an ephemeral per-process secret. "
-        "Set JWT_SECRET in .env for tokens that survive restarts."
+        "Set JWT_SECRET for tokens that survive restarts."
     )
 
 
