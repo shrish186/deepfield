@@ -1,4 +1,4 @@
-"""Route tests for the thread endpoints."""
+"""Route tests for the thread endpoints (history is scoped to the owner)."""
 from db.models import Report, Thread
 
 
@@ -8,8 +8,13 @@ async def test_create_thread(client):
     assert r.json()["title"] == "New research"
 
 
-async def test_list_threads_newest_first(client, db_session):
-    db_session.add_all([Thread(title="oldest"), Thread(title="newest")])
+async def test_list_threads_newest_first(client, db_session, test_user):
+    db_session.add_all(
+        [
+            Thread(title="oldest", user_id=test_user.id),
+            Thread(title="newest", user_id=test_user.id),
+        ]
+    )
     await db_session.commit()
 
     r = await client.get("/threads")
@@ -23,8 +28,10 @@ async def test_get_missing_thread_404(client):
     assert (await client.get("/threads/99999")).status_code == 404
 
 
-async def test_get_thread_includes_reports_with_mode_and_scope(client, db_session):
-    thread = Thread(title="t")
+async def test_get_thread_includes_reports_with_mode_and_scope(
+    client, db_session, test_user
+):
+    thread = Thread(title="t", user_id=test_user.id)
     db_session.add(thread)
     await db_session.commit()
     await db_session.refresh(thread)
@@ -49,3 +56,17 @@ async def test_get_thread_includes_reports_with_mode_and_scope(client, db_sessio
     assert rep["query"] == "q1"
     assert rep["mode"] == "basic"
     assert rep["source_scope"] == "arxiv"
+
+
+async def test_threads_are_scoped_to_owner(client, db_session, test_user):
+    """A thread owned by another account must never be listed or fetchable."""
+    others = Thread(title="someone else's thread", user_id=test_user.id + 999)
+    db_session.add(others)
+    await db_session.commit()
+    await db_session.refresh(others)
+
+    listed = (await client.get("/threads")).json()
+    assert all(t["title"] != "someone else's thread" for t in listed)
+
+    # And it can't be opened directly by id either (404, not 403).
+    assert (await client.get(f"/threads/{others.id}")).status_code == 404

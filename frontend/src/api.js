@@ -57,13 +57,14 @@ export async function getUsage() {
 }
 
 export async function listThreads() {
-  const res = await fetch(`${API_BASE}/threads`);
+  // History is per-account, so this is an authenticated request.
+  const res = await fetch(`${API_BASE}/threads`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`listThreads failed: ${res.status}`);
   return res.json();
 }
 
 export async function getThread(id) {
-  const res = await fetch(`${API_BASE}/threads/${id}`);
+  const res = await fetch(`${API_BASE}/threads/${id}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`getThread failed: ${res.status}`);
   return res.json();
 }

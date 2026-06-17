@@ -90,6 +90,10 @@ async def init_db() -> None:
             "ALTER TABLE reports ADD COLUMN IF NOT EXISTS user_id INTEGER "
             "REFERENCES users(id) ON DELETE SET NULL",
             "CREATE INDEX IF NOT EXISTS ix_reports_user_id ON reports(user_id)",
+            # Thread ownership — scopes the history list/detail to the user.
+            "ALTER TABLE threads ADD COLUMN IF NOT EXISTS user_id INTEGER "
+            "REFERENCES users(id) ON DELETE CASCADE",
+            "CREATE INDEX IF NOT EXISTS ix_threads_user_id ON threads(user_id)",
             # ANN index for cosine similarity over canonical claim embeddings.
             # Created outside create_all because it needs the pgvector opclass.
             "CREATE INDEX IF NOT EXISTS ix_canonical_claims_embedding "

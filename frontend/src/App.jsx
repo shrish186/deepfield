@@ -54,12 +54,18 @@ export default function App() {
       lastTurn.status !== "failed");
 
   const refreshThreads = useCallback(async () => {
+    // History is per-account: clear it when signed out, and reload whenever the
+    // signed-in user changes so one account never shows another's threads.
+    if (!auth.user) {
+      setThreads([]);
+      return;
+    }
     try {
       setThreads(await listThreads());
     } catch {
       // history is best-effort
     }
-  }, []);
+  }, [auth.user]);
 
   useEffect(() => {
     refreshThreads();

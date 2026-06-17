@@ -281,11 +281,12 @@ async def create_report(
     thread_id = payload.thread_id
     if thread_id is not None:
         thread = await session.get(Thread, thread_id)
-        if thread is None:
+        # Can only add to a thread you own (404 hides others' threads).
+        if thread is None or (thread.user_id is not None and thread.user_id != user.id):
             raise HTTPException(status_code=404, detail="thread not found")
     else:
         title = query if len(query) <= 120 else query[:117] + "…"
-        thread = Thread(title=title)
+        thread = Thread(title=title, user_id=user.id)
         session.add(thread)
         await session.commit()
         await session.refresh(thread)
@@ -326,9 +327,10 @@ async def create_report(
 
 @router.post("/threads", response_model=ThreadSummary, status_code=201)
 async def create_thread(
+    user: User = Depends(require_user),
     session: AsyncSession = Depends(get_session),
 ) -> Thread:
-    thread = Thread(title="New research")
+    thread = Thread(title="New research", user_id=user.id)
     session.add(thread)
     await session.commit()
     await session.refresh(thread)
@@ -337,19 +339,28 @@ async def create_thread(
 
 @router.get("/threads", response_model=List[ThreadSummary])
 async def list_threads(
+    user: User = Depends(require_user),
     session: AsyncSession = Depends(get_session),
 ) -> List[Thread]:
+    # History is private: only the signed-in user's own conversations.
     return (
-        await session.execute(select(Thread).order_by(Thread.id.desc()))
+        await session.execute(
+            select(Thread)
+            .where(Thread.user_id == user.id)
+            .order_by(Thread.id.desc())
+        )
     ).scalars().all()
 
 
 @router.get("/threads/{thread_id}", response_model=ThreadDetail)
 async def get_thread(
-    thread_id: int, session: AsyncSession = Depends(get_session)
+    thread_id: int,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
 ) -> ThreadDetail:
     thread = await session.get(Thread, thread_id)
-    if thread is None:
+    # 404 (not 403) for someone else's thread — don't reveal that it exists.
+    if thread is None or thread.user_id != user.id:
         raise HTTPException(status_code=404, detail="thread not found")
     reports = (
         await session.execute(
