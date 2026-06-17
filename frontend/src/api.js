@@ -1,8 +1,15 @@
-// Central place for backend URLs. Override at build time with VITE_API_URL.
+// Central place for backend URLs.
+//   • Unset (local `vite dev`)        → talk to the backend on :8000.
+//   • VITE_API_URL="http://host:8000" → explicit cross-origin (docker-compose).
+//   • VITE_API_URL="" (single-service)→ same origin: the FastAPI backend serves
+//                                        this bundle, so use relative URLs.
+const _configured = import.meta.env.VITE_API_URL;
 export const API_BASE =
-  import.meta.env.VITE_API_URL || "http://localhost:8000";
+  _configured !== undefined ? _configured : "http://localhost:8000";
 
-export const WS_BASE = API_BASE.replace(/^http/, "ws");
+export const WS_BASE = API_BASE
+  ? API_BASE.replace(/^http/, "ws")
+  : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
 
 // Read the JWT the auth layer stored, so authenticated requests can replay it.
 function authHeaders(extra = {}) {

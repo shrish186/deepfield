@@ -80,3 +80,15 @@ app.include_router(auth_router)
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+# Single-service deploy: if the built frontend was bundled into the image (see
+# the root Dockerfile), serve it from the backend so the whole app runs as one
+# service. Mounted last so every API route above takes precedence; the SPA uses
+# hash routing, so serving index.html at "/" is all that's needed. Skipped in
+# local docker-compose, where the frontend is a separate nginx container.
+_static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(_static_dir):
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/", StaticFiles(directory=_static_dir, html=True), name="frontend")

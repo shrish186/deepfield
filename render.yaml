@@ -1,0 +1,40 @@
+# Render Blueprint — one web service (backend serving the bundled frontend) plus
+# a managed Postgres with pgvector. Deploy via Render → New → Blueprint, point it
+# at this repo, then fill in the three secret keys it prompts for.
+# See DEPLOY.md for the click-by-click.
+
+services:
+  - type: web
+    name: deepfield
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DEEPFIELD_ENV
+        value: production
+      # Render generates a strong secret and keeps it stable across deploys.
+      - key: JWT_SECRET
+        generateValue: true
+      # Secrets — entered in the Render dashboard, never stored in the repo.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: VOYAGE_API_KEY
+        sync: false
+      # Cost controls (env-tunable in the dashboard).
+      - key: DEEPFIELD_FREE_DEEP_RUNS
+        value: "3"
+      - key: DEEPFIELD_GLOBAL_DAILY_DEEP_RUNS
+        value: "50"
+      # Wired automatically from the database below.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: deepfield-db
+          property: connectionString
+
+databases:
+  - name: deepfield-db
+    plan: free
+    postgresMajorVersion: "16"

@@ -1,118 +1,93 @@
-# Deploying Deepfield to Railway
+# Deploying Deepfield
 
-This guide deploys the three pieces — **database**, **backend**, **frontend** —
-as three Railway services in one project. Plan for ~15 minutes.
+Deepfield ships as **one web service** (the FastAPI backend serves both the API
+and the bundled React frontend) plus a **Postgres database with pgvector**.
 
-> **Why not Railway's one-click Postgres?** Deepfield's disagreement graph needs
-> the `pgvector` extension, which Railway's default Postgres image does not
-> include. We deploy Postgres from the official `pgvector/pgvector` image instead
-> (step 1). If you skip this, the backend will fail to start on `CREATE EXTENSION
-> vector`.
+- **[Option A — Render](#option-a--render-recommended-free)** — free, Blueprint-driven, recommended.
+- **[Option B — Railway](#option-b--railway-paid)** — smooth but needs a card.
 
 ---
 
-## 0. Prerequisites
+## Option A — Render (recommended, free)
 
-- A [Railway](https://railway.app) account.
-- The repo pushed to GitHub (done: `shrish186/deepfield`).
-- Your `ANTHROPIC_API_KEY` and `TAVILY_API_KEY`. Optionally `VOYAGE_API_KEY`
-  (enables the graph; the app runs fine without it).
-- Generate a JWT secret and keep it handy:
-  ```bash
-  python -c "import secrets; print(secrets.token_urlsafe(48))"
-  ```
+Render reads [`render.yaml`](render.yaml) and provisions everything: the Docker
+web service and a managed Postgres (which supports `pgvector`). ~10 minutes.
 
-Create a new Railway **project** (empty). You'll add three services to it.
+### Steps
 
----
+1. **Push to GitHub** — already done (`shrish186/deepfield`).
+2. Go to **[dashboard.render.com](https://dashboard.render.com)** → **New → Blueprint**.
+3. **Connect the `deepfield` repo.** Render detects `render.yaml` and shows the
+   plan: one web service + one Postgres.
+4. It will prompt for the three secret env vars (marked `sync: false`). Paste:
+   - `ANTHROPIC_API_KEY`
+   - `TAVILY_API_KEY`
+   - `VOYAGE_API_KEY` *(optional — leave blank to run without the graph)*
+   `JWT_SECRET` is generated for you; `DATABASE_URL` is wired automatically.
+5. Click **Apply**. Render builds the Docker image and creates the database.
+   First boot runs the schema setup (incl. `CREATE EXTENSION vector`) on its own.
+6. Open the web service URL (e.g. `https://deepfield.onrender.com`) → sign up → run a report.
 
-## 1. Database service (pgvector)
+That's it — because the frontend is served by the backend, there's no separate
+frontend service, no `VITE_API_URL`, and no CORS to configure.
 
-1. **New → Empty Service → Deploy from Docker Image** → image:
-   `pgvector/pgvector:pg16`
-2. In the service **Variables**, set:
-   ```
-   POSTGRES_USER=deepfield
-   POSTGRES_PASSWORD=<a long random password>
-   POSTGRES_DB=deepfield
-   ```
-3. In **Settings → Volumes**, add a volume mounted at:
-   ```
-   /var/lib/postgresql/data
-   ```
-   (Without a volume your data is wiped on every redeploy.)
-4. Deploy. Note the service name (e.g. `pgvector`) — you'll reference it next.
+### Free-tier caveats (be aware)
 
-The internal connection string will be:
-```
-postgresql://deepfield:<password>@<db-service-name>.railway.internal:5432/deepfield
-```
+- **Cold starts:** a free web service **sleeps after ~15 min idle**; the next
+  visit takes ~30–60s to wake. Fine for a portfolio; if you want always-on,
+  the web service is $7/mo.
+- **Database lifespan:** Render's **free Postgres is deleted after 30 days**
+  (with email warnings). Upgrade the DB (~$7/mo) to keep it, or recreate it.
+- **Memory:** free web is 512 MB RAM — plenty for single-user testing; the
+  global daily cap keeps load bounded.
 
 ---
 
-## 2. Backend service
+## Option B — Railway (paid)
 
-1. **New → GitHub Repo →** select `shrish186/deepfield`.
-2. **Settings → Root Directory:** `backend`  (Railway builds `backend/Dockerfile`).
-3. **Settings → Networking → Generate Domain** — note the URL, e.g.
-   `https://deepfield-backend.up.railway.app`.
-4. **Variables** (paste your real values):
-   ```
-   ANTHROPIC_API_KEY=...
-   TAVILY_API_KEY=...
-   VOYAGE_API_KEY=...            # optional; omit to run without the graph
-   JWT_SECRET=...                # the token from step 0 — REQUIRED in prod
-   DEEPFIELD_ENV=production
-   DATABASE_URL=postgresql://deepfield:<password>@<db-service-name>.railway.internal:5432/deepfield
-   DEEPFIELD_FREE_DEEP_RUNS=3
-   DEEPFIELD_GLOBAL_DAILY_DEEP_RUNS=50
-   ALLOWED_ORIGINS=https://<your-frontend-domain>   # fill in after step 3
-   ```
-   You won't know the frontend domain yet — set `ALLOWED_ORIGINS` after step 3,
-   then redeploy. The backend binds Railway's injected `$PORT` automatically.
-5. Deploy. Visit `https://<backend-domain>/health` → should return
-   `{"status":"ok"}`, and `/docs` shows the API.
+Railway is smooth but its free trial is one-time; once it's "maxed out" you must
+add a card (Hobby plan, ~$5/mo usage-based).
+
+1. **New Project → Deploy from GitHub repo** → `deepfield`.
+2. Add a **Docker Image** service from `pgvector/pgvector:pg16` (⚠️ *not* the
+   default Postgres — it lacks pgvector). Give it a volume at
+   `/var/lib/postgresql/data` and `POSTGRES_USER/PASSWORD/DB`.
+3. On the app service, set **Root Directory** empty (it builds the root
+   `Dockerfile`, the same single-service image), generate a domain, and set the
+   env vars below.
+4. Deploy.
 
 ---
 
-## 3. Frontend service
+## Environment variables (both hosts)
 
-1. **New → GitHub Repo →** select the same repo again.
-2. **Settings → Root Directory:** `frontend`.
-3. **Settings → Networking → Generate Domain** — this is your app's public URL.
-4. **Variables:**
-   ```
-   VITE_API_URL=https://<your-backend-domain>
-   ```
-   Railway passes this to the Docker build as the `VITE_API_URL` build arg, so
-   the browser bundle talks to your backend. (It's baked in at build time — if
-   you change it, redeploy.) nginx binds Railway's `$PORT` automatically.
-5. Deploy.
-
----
-
-## 4. Wire the two together
-
-1. Back on the **backend** service, set
-   `ALLOWED_ORIGINS=https://<your-frontend-domain>` and redeploy.
-2. Open the frontend domain → create an account → run a deep report.
+| Var | Required | Notes |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | ✅ | Claude. |
+| `TAVILY_API_KEY` | ✅ | Web search. |
+| `VOYAGE_API_KEY` | optional | Enables the disagreement graph. |
+| `JWT_SECRET` | ✅ (prod) | Render generates it. Else: `python -c "import secrets; print(secrets.token_urlsafe(48))"`. |
+| `DEEPFIELD_ENV` | ✅ | `production`. |
+| `DATABASE_URL` | ✅ | Render wires it; on Railway use the db service URL. |
+| `DEEPFIELD_FREE_DEEP_RUNS` | optional | Per-user monthly deep-run cap (default 3). |
+| `DEEPFIELD_GLOBAL_DAILY_DEEP_RUNS` | optional | Global daily ceiling (default 50). |
 
 ---
 
-## 5. Protect your wallet
+## Protect your wallet
 
-The cost controls are already on:
+Cost controls are on by default:
 
 - **Per-user:** `DEEPFIELD_FREE_DEEP_RUNS` deep runs/account/month.
-- **Global:** `DEEPFIELD_GLOBAL_DAILY_DEEP_RUNS` total deep runs/day across
-  everyone — the hard ceiling. Lower it any time from the backend Variables.
-- Basic and chat answers are unmetered (cheap model, no web fan-out).
+- **Global:** `DEEPFIELD_GLOBAL_DAILY_DEEP_RUNS` total deep runs/day — the hard
+  ceiling. Lower it any time.
+- Basic and chat answers are unmetered.
 
-Also set **spend limits in the Anthropic and Tavily dashboards** as a backstop —
-the app cap and the provider cap are independent safety nets.
+Also set **spend limits in the Anthropic and Tavily dashboards** as an
+independent backstop, and **rotate any key** that has been shown in a screenshot.
 
-**Give yourself unlimited runs:** set your own account's plan to `pro` in the DB
-(from Railway's Postgres service → Data tab, or `psql`):
+**Give yourself unlimited runs:** in your host's Postgres console (Render:
+database → **Connect → PSQL**), run:
 ```sql
 UPDATE users SET plan = 'pro' WHERE email = 'you@example.com';
 ```
@@ -122,7 +97,8 @@ The per-user cap is then skipped for you (the global daily ceiling still applies
 
 ## Notes
 
-- The research pipeline runs as an in-process background task, so run the
-  backend as a **single instance** (no horizontal autoscaling) for now.
-- Each deploy redeploys from `main`. Push to GitHub → Railway rebuilds.
-- Rotate any API key that has ever been shown in a screenshot or committed.
+- The research pipeline runs as an in-process background task — run a **single
+  instance** (no autoscaling) for now.
+- Each push to `main` triggers a redeploy.
+- Local development still uses `docker compose up` (frontend + backend as
+  separate services); the single-service image is only for deploy.
