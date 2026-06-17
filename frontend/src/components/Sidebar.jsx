@@ -190,11 +190,6 @@ export default function Sidebar({
             </button>
           </div>
         )}
-
-        <div className="flex items-center gap-2 text-[11px] text-white/40">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          Powered by Claude + Tavily
-        </div>
       </div>
     </aside>
   );

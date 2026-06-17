@@ -366,10 +366,6 @@ export default function App() {
                 </button>
               ))}
             </div>
-
-            <div className="mt-16 text-[12px] text-white/30">
-              The deep-research engine · Claude + Tavily + LangGraph
-            </div>
           </div>
         ) : (
           // ---------- Active conversation ----------
