@@ -17,10 +17,51 @@ function authHeaders(extra = {}) {
   return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
 }
 
+// Bring-your-own-key: keys live only in this browser's localStorage and ride
+// along as request headers so the run bills the user, not the server. Never sent
+// anywhere but the report endpoint.
+const BYOK_KEY = "deepfield_byok";
+
+export function getByokKeys() {
+  try {
+    return JSON.parse(localStorage.getItem(BYOK_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveByokKeys(keys) {
+  const clean = {
+    anthropic: (keys.anthropic || "").trim(),
+    tavily: (keys.tavily || "").trim(),
+    voyage: (keys.voyage || "").trim(),
+  };
+  if (clean.anthropic || clean.tavily || clean.voyage) {
+    localStorage.setItem(BYOK_KEY, JSON.stringify(clean));
+  } else {
+    localStorage.removeItem(BYOK_KEY);
+  }
+}
+
+// True once both required keys are present — the point at which caps are skipped.
+export function hasByok() {
+  const k = getByokKeys();
+  return Boolean(k.anthropic && k.tavily);
+}
+
+function byokHeaders() {
+  const k = getByokKeys();
+  const h = {};
+  if (k.anthropic) h["X-Anthropic-Key"] = k.anthropic;
+  if (k.tavily) h["X-Tavily-Key"] = k.tavily;
+  if (k.voyage) h["X-Voyage-Key"] = k.voyage;
+  return h;
+}
+
 export async function createReport(query, opts = {}) {
   const res = await fetch(`${API_BASE}/reports`, {
     method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: authHeaders({ "Content-Type": "application/json", ...byokHeaders() }),
     body: JSON.stringify({
       query,
       mode: opts.mode ?? "deep",

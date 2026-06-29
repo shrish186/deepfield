@@ -42,7 +42,9 @@ def _credibility_prior(url: str, content: str = "") -> float:
 
 
 async def _tavily_search() -> AsyncTavilyClient:
-    return AsyncTavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+    from agents.keys import tavily_key
+
+    return AsyncTavilyClient(api_key=tavily_key())
 
 
 def _host(url: str) -> str:

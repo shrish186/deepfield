@@ -5,6 +5,7 @@ import QueryInput from "./components/QueryInput";
 import Turn from "./components/Turn";
 import GraphExplorer from "./components/GraphExplorer";
 import AuthView from "./components/AuthView";
+import KeySettings from "./components/KeySettings";
 import { useAuth } from "./hooks/useAuth";
 import {
   createReport,
@@ -13,6 +14,7 @@ import {
   listThreads,
   getUsage,
   getDisagreements,
+  hasByok,
 } from "./api";
 
 // Deliberately contested questions — topics where credible sources genuinely
@@ -39,6 +41,8 @@ export default function App() {
   const [usage, setUsage] = useState(null); // { plan, used, limit, remaining }
   const [limited, setLimited] = useState(false);
   const [contested, setContested] = useState([]); // top graph disagreements for the hero
+  const [showKeys, setShowKeys] = useState(false);
+  const [byok, setByok] = useState(hasByok()); // user supplied their own API keys
   const [threadId, setThreadId] = useState(null);
   const [turns, setTurns] = useState([]); // [{ id, query, status }]
   const [submitting, setSubmitting] = useState(false);
@@ -310,8 +314,8 @@ export default function App() {
     );
   }
 
-  // Shared notice banner. A usage-cap hit (429) shows a neutral amber notice;
-  // any other error shows red.
+  // Shared notice banner. A usage-cap hit (429) shows a neutral amber notice
+  // with a path to bring-your-own-key; any other error shows red.
   const banner = error ? (
     <div
       className={`rounded-xl border p-3 text-sm ${
@@ -321,11 +325,25 @@ export default function App() {
       }`}
     >
       <div>{error}</div>
+      {limited && (
+        <button
+          onClick={() => setShowKeys(true)}
+          className="mt-2 inline-flex rounded-lg bg-gradient-to-r from-accent to-accent-cyan px-3 py-1.5 text-[13px] font-semibold text-white shadow-glow transition hover:brightness-110"
+        >
+          Add your API key →
+        </button>
+      )}
     </div>
   ) : null;
 
   return (
     <div className="app-bg flex min-h-full">
+      {showKeys && (
+        <KeySettings
+          onClose={() => setShowKeys(false)}
+          onSaved={() => setByok(hasByok())}
+        />
+      )}
       <Sidebar
         onNewResearch={reset}
         threads={threads}
@@ -338,6 +356,8 @@ export default function App() {
         onLogin={() => goto("#/login")}
         onSignup={() => goto("#/signup")}
         onLogout={auth.logout}
+        onOpenKeys={() => setShowKeys(true)}
+        byokActive={byok}
       />
 
       <main className="flex-1 min-w-0">

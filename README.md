@@ -183,6 +183,21 @@ This is a working, end-to-end build. Known next steps:
 
 ---
 
+## Self-hosting
+
+Deepfield is meant to be run by anyone. The whole stack is in this repo — clone
+it, add your own API keys (Anthropic + Tavily required; Voyage optional), and
+either `docker compose up` locally or deploy with the included Render Blueprint
+(see [DEPLOY.md](DEPLOY.md)). When you self-host, the API usage is billed to
+*your* keys, not the maintainer's.
+
+The hosted demo also supports **bring-your-own-key**: paste your own keys in the
+app and your runs bill you directly (and skip the demo's shared usage caps).
+
+## License
+
+[MIT](LICENSE) © 2026 Shrish Kapoor. Use it, fork it, build on it.
+
 ## Note
 
 Deepfield generates AI-assisted research and can be wrong. It's a tool for accelerating and structuring research — verify anything important against the cited primary sources.

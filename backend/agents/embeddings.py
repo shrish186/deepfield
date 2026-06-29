@@ -26,34 +26,39 @@ EMBED_DIM = int(os.getenv("DEEPFIELD_EMBED_DIM", "1024"))
 # Voyage caps a single request at 128 inputs; batch larger lists.
 _MAX_BATCH = 128
 
-_client = None  # voyageai.AsyncClient | None
+_clients: dict = {}  # key -> voyageai.AsyncClient
 _warned = False
 
 
 def has_embeddings() -> bool:
-    """True when an API key is configured — the cheap gate callers check first
-    so they can skip the graph entirely without constructing a client."""
-    return bool(os.getenv("VOYAGE_API_KEY"))
+    """True when a key is available (caller's BYOK key or the server env) — the
+    cheap gate callers check first so they can skip the graph entirely."""
+    from agents.keys import voyage_key
+
+    return bool(voyage_key())
 
 
 def _get_client():
-    """Lazily build the async Voyage client. Returns ``None`` (and warns once)
-    when no key is set, mirroring the lazy pattern in ``agents/base.py``."""
-    global _client, _warned
-    if _client is not None:
-        return _client
-    key = os.getenv("VOYAGE_API_KEY")
+    """Lazily build the async Voyage client for the active key. Returns ``None``
+    (and warns once) when no key is set, mirroring ``agents/base.py``."""
+    global _warned
+    from agents.keys import voyage_key
+
+    key = voyage_key()
     if not key:
         if not _warned:
             logger.info("VOYAGE_API_KEY not set — disagreement graph is dormant")
             _warned = True
         return None
-    # Imported lazily so a missing/broken voyageai install can never take down
-    # model import or the rest of the app.
-    import voyageai
+    client = _clients.get(key)
+    if client is None:
+        # Imported lazily so a missing/broken voyageai install can never take
+        # down model import or the rest of the app.
+        import voyageai
 
-    _client = voyageai.AsyncClient(api_key=key)
-    return _client
+        client = voyageai.AsyncClient(api_key=key)
+        _clients[key] = client
+    return client
 
 
 async def embed_texts(

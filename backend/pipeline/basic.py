@@ -143,7 +143,9 @@ async def run_basic(
         academic = []
     academic = academic[:5]  # basic mode stays light
 
-    client = AsyncTavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+    from agents.keys import tavily_key
+
+    client = AsyncTavilyClient(api_key=tavily_key())
     results: List[dict] = []
     try:
         web = await client.search(

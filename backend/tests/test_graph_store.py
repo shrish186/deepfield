@@ -198,7 +198,7 @@ async def test_embeddings_noop_without_key(monkeypatch):
     # No key configured: the client must never initialise and calls return
     # empty/None so the graph layer silently skips rather than crashing.
     monkeypatch.delenv("VOYAGE_API_KEY", raising=False)
-    monkeypatch.setattr(embeddings, "_client", None)
+    monkeypatch.setattr(embeddings, "_clients", {})
     monkeypatch.setattr(embeddings, "_warned", False)
 
     assert embeddings.has_embeddings() is False
@@ -209,5 +209,5 @@ async def test_embeddings_noop_without_key(monkeypatch):
 async def test_embed_texts_empty_input_is_noop(monkeypatch):
     # Even with a key, an empty batch shouldn't call the API.
     monkeypatch.setenv("VOYAGE_API_KEY", "test-key-not-used")
-    monkeypatch.setattr(embeddings, "_client", None)
+    monkeypatch.setattr(embeddings, "_clients", {})
     assert await embeddings.embed_texts([]) == []

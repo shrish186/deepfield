@@ -5,7 +5,15 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    UploadFile,
+)
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -241,6 +249,9 @@ async def create_report(
     background_tasks: BackgroundTasks,
     user: User = Depends(require_user),
     session: AsyncSession = Depends(get_session),
+    x_anthropic_key: Optional[str] = Header(default=None),
+    x_tavily_key: Optional[str] = Header(default=None),
+    x_voyage_key: Optional[str] = Header(default=None),
 ) -> Report:
     query = payload.query.strip()
     if not query:
@@ -249,11 +260,25 @@ async def create_report(
     mode = payload.mode if payload.mode in ("deep", "basic", "chat") else "deep"
     source_scope = normalise_scope(payload.source_scope)
 
-    # Usage gate (cost control): DEEP runs are capped per-user-per-month and by
-    # a global daily ceiling. Both return 429 (a quota limit, not a payment
-    # wall). Basic/chat are unmetered and fall straight through. Checked before
-    # any pipeline spawns, so a blocked run costs nothing.
-    if mode == "deep":
+    # Bring-your-own-key: when the caller supplies their own Anthropic + Tavily
+    # keys, the run bills them — so it bypasses the server's cost caps. Keys are
+    # passed straight to the pipeline, never persisted or logged.
+    byok = bool((x_anthropic_key or "").strip() and (x_tavily_key or "").strip())
+    run_keys = (
+        {
+            "anthropic": (x_anthropic_key or "").strip(),
+            "tavily": (x_tavily_key or "").strip(),
+            "voyage": (x_voyage_key or "").strip() or None,
+        }
+        if byok
+        else None
+    )
+
+    # Usage gate (cost control): DEEP runs on the SERVER's keys are capped
+    # per-user-per-month and by a global daily ceiling. Both return 429 (a quota
+    # limit, not a payment wall). BYOK runs and basic/chat fall straight through.
+    # Checked before any pipeline spawns, so a blocked run costs nothing.
+    if mode == "deep" and not byok:
         limit = _deep_limit(user.plan)
         if limit is not None:
             used = await _deep_runs_this_month(session, user.id)
@@ -262,7 +287,8 @@ async def create_report(
                     status_code=429,
                     detail=(
                         f"You've reached your monthly limit of {limit} deep research "
-                        "runs. Your allowance resets on the 1st."
+                        "runs. Add your own API key in settings for unlimited runs, "
+                        "or wait — your allowance resets on the 1st."
                     ),
                 )
         if GLOBAL_DAILY_DEEP_RUNS is not None:
@@ -271,8 +297,9 @@ async def create_report(
                 raise HTTPException(
                     status_code=429,
                     detail=(
-                        "Deepfield has reached today's research capacity. "
-                        "Please try again tomorrow."
+                        "Deepfield has reached today's shared research capacity. "
+                        "Add your own API key in settings to keep going, or try "
+                        "again tomorrow."
                     ),
                 )
 
@@ -321,6 +348,7 @@ async def create_report(
         payload.year_min,
         payload.include_domains,
         payload.exclude_domains,
+        run_keys,
     )
     return report
 

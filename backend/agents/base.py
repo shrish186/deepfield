@@ -31,7 +31,8 @@ BASIC_MODEL = os.getenv("DEEPFIELD_BASIC_MODEL", "claude-haiku-4-5")
 # if the account moves tiers (tier 1 ≈ 30k; tier 3/4 ≈ 800k–2M).
 INPUT_TPM = int(os.getenv("DEEPFIELD_INPUT_TPM", "400000"))
 
-_client: Optional[AsyncAnthropic] = None
+# One client per distinct API key (env key, plus any bring-your-own-key callers).
+_clients: dict[str, AsyncAnthropic] = {}
 
 
 class _TokenRateLimiter:
@@ -71,14 +72,17 @@ _limiter = _TokenRateLimiter(INPUT_TPM)
 
 
 def get_client() -> AsyncAnthropic:
-    global _client
-    if _client is None:
-        # max_retries gives the SDK room to back off on any residual 429s
-        # (e.g. the separate output-tokens/min limit) respecting retry-after.
-        _client = AsyncAnthropic(
-            api_key=os.getenv("ANTHROPIC_API_KEY"), max_retries=6
-        )
-    return _client
+    # Resolve the active key (caller's BYOK key, else the server env key) and
+    # reuse one client per key. max_retries gives the SDK room to back off on
+    # any residual 429s (e.g. the separate output-tokens/min limit).
+    from agents.keys import anthropic_key
+
+    key = anthropic_key() or ""
+    client = _clients.get(key)
+    if client is None:
+        client = AsyncAnthropic(api_key=key or None, max_retries=6)
+        _clients[key] = client
+    return client
 
 
 def _estimate_input_tokens(prompt: str, system: str) -> int:

@@ -29,6 +29,8 @@ export default function Sidebar({
   onLogin,
   onSignup,
   onLogout,
+  onOpenKeys,
+  byokActive,
 }) {
   const [historyQuery, setHistoryQuery] = useState("");
   const q = historyQuery.trim().toLowerCase();
@@ -115,6 +117,19 @@ export default function Sidebar({
       <div className="mt-auto space-y-3 px-1">
         <div className="h-px bg-white/8" />
 
+        <button
+          onClick={onOpenKeys}
+          className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-sm text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+        >
+          <span className="text-[15px] leading-none">🔑</span>
+          <span className="flex-1 text-left">API keys</span>
+          {byokActive && (
+            <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+              active
+            </span>
+          )}
+        </button>
+
         {user ? (
           <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5">
             <div className="flex items-center gap-2.5">
@@ -131,7 +146,12 @@ export default function Sidebar({
               </div>
             </div>
 
-            {usage && (
+            {byokActive ? (
+              <div className="mt-2 rounded-lg bg-emerald-400/[0.06] px-2 py-1.5 text-[11.5px] text-emerald-300/90">
+                ✦ Unlimited — using your own key
+              </div>
+            ) : (
+              usage && (
               usage.limit == null ? (
                 <div className="mt-2 rounded-lg bg-white/[0.04] px-2 py-1.5 text-[11.5px] text-white/55">
                   ✦ Unlimited deep runs
@@ -164,6 +184,7 @@ export default function Sidebar({
                     </div>
                   )}
                 </div>
+              )
               )
             )}
 

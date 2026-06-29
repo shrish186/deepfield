@@ -104,6 +104,7 @@ async def run_pipeline(
     year_min: Optional[int] = None,
     include_domains: Optional[str] = None,
     exclude_domains: Optional[str] = None,
+    keys: Optional[dict] = None,
 ) -> None:
     """Execute a report. Designed to be launched as a background task; it owns
     the report's status lifecycle and the WS feed.
@@ -111,7 +112,19 @@ async def run_pipeline(
     `mode` selects the engine: "deep" runs the full 5-layer chain on Sonnet;
     "basic" runs one quick search + synthesis pass on the cheaper Haiku model.
     `context` carries follow-up background (prior question / the finding the user
-    drilled into) so synthesis can answer in conversation."""
+    drilled into) so synthesis can answer in conversation. `keys` optionally
+    carries the caller's own API keys (BYOK), bound for this run only."""
+    # Bind any bring-your-own-keys to this run's async context before any client
+    # is constructed downstream. Falls back to server env keys when absent.
+    if keys:
+        from agents.keys import set_request_keys
+
+        set_request_keys(
+            anthropic=keys.get("anthropic"),
+            tavily=keys.get("tavily"),
+            voyage=keys.get("voyage"),
+        )
+
     emit = make_emit(report_id)
     ctx = AgentContext(report_id=report_id, emit=emit)
 
