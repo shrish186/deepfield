@@ -1,6 +1,7 @@
 """Async SQLAlchemy engine, session factory, and Base."""
 import os
 
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -33,11 +34,33 @@ RAW_DATABASE_URL = os.getenv(
 DATABASE_URL = normalise_db_url(RAW_DATABASE_URL)
 
 
+def _engine_url_and_args(url_str: str):
+    """Split the URL into an asyncpg-friendly URL + connect_args.
+
+    Managed Postgres providers (Neon, Render, Supabase, Heroku) hand out
+    libpq-style ``?sslmode=require`` / ``channel_binding`` query params. asyncpg
+    doesn't accept those as query args — it wants an ``ssl`` connect arg — so we
+    strip them and translate to ``ssl="require"`` when TLS was requested. Plain
+    local URLs (no sslmode) pass through unchanged with no TLS."""
+    url = make_url(url_str)
+    sslmode = url.query.get("sslmode")
+    drop = [k for k in ("sslmode", "channel_binding") if k in url.query]
+    if drop:
+        url = url.difference_update_query(drop)
+    connect_args = {}
+    if sslmode and sslmode not in ("disable", "allow"):
+        connect_args["ssl"] = "require"
+    return url, connect_args
+
+
 class Base(DeclarativeBase):
     pass
 
 
-engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
+_url, _connect_args = _engine_url_and_args(DATABASE_URL)
+engine = create_async_engine(
+    _url, echo=False, pool_pre_ping=True, connect_args=_connect_args
+)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine, class_=AsyncSession, expire_on_commit=False
