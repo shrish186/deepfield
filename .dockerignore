@@ -1,0 +1,13 @@
+# Keep the build context small for the root (single-service) Dockerfile.
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.venv
+**/venv
+**/dist
+.git
+.github
+docs
+.claude
+.env
+*.env.local

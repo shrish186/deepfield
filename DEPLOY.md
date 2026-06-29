@@ -3,12 +3,72 @@
 Deepfield ships as **one web service** (the FastAPI backend serves both the API
 and the bundled React frontend) plus a **Postgres database with pgvector**.
 
-- **[Option A — Render](#option-a--render-recommended-free)** — free, Blueprint-driven, recommended.
-- **[Option B — Railway](#option-b--railway-paid)** — smooth but needs a card.
+- **[Option A — Fly.io + Neon](#option-a--flyio--neon)** — Docker-native, fast, no idle quirks.
+- **[Option B — Render](#option-b--render-free)** — free, Blueprint-driven.
+- **[Option C — Railway](#option-c--railway-paid)** — smooth but needs a card.
 
 ---
 
-## Option A — Render (recommended, free)
+## Option A — Fly.io + Neon
+
+The web app runs on **Fly.io** (from the root `Dockerfile`); the database is
+**Neon** — free serverless Postgres with `pgvector`, no credit card, no 30-day
+expiry. ~15 minutes.
+
+### 1. Database — Neon
+
+1. Sign up at **[neon.tech](https://neon.tech)** (free, no card) → **Create project**.
+2. On the project dashboard, copy the **connection string** — it looks like
+   `postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require`.
+   Keep it for step 2. (pgvector is available out of the box; the app enables it
+   on first boot.)
+
+### 2. Web app — Fly.io
+
+1. **Install flyctl** and sign in (Fly needs a card on file for the free
+   allowance, but a low-traffic demo stays ~$0):
+   ```bash
+   curl -L https://fly.io/install.sh | sh      # macOS/Linux
+   fly auth signup                             # or: fly auth login
+   ```
+2. From the repo root, create the app (the repo already has `fly.toml`):
+   ```bash
+   cd /path/to/deepfield
+   fly apps create deepfield          # if the name is taken, pick another and
+                                      # update `app = ...` in fly.toml
+   ```
+3. Set secrets — your **rotated** keys plus the Neon URL. `JWT_SECRET` is
+   generated inline:
+   ```bash
+   fly secrets set \
+     ANTHROPIC_API_KEY=sk-ant-... \
+     TAVILY_API_KEY=tvly-... \
+     VOYAGE_API_KEY=pa-... \
+     JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))") \
+     DATABASE_URL="postgresql://...neon.tech/neondb?sslmode=require"
+   ```
+   (Omit `VOYAGE_API_KEY` to run without the graph.)
+4. Deploy:
+   ```bash
+   fly deploy
+   ```
+5. Open it:
+   ```bash
+   fly open
+   ```
+   First boot runs the schema setup (incl. `CREATE EXTENSION vector` on Neon).
+   Sign up and run a search.
+
+### Notes
+
+- `fly.toml` scales the machine to zero when idle (free-friendly); it wakes on
+  the next request in a second or two. Set `min_machines_running = 1` for
+  always-on (small cost).
+- Logs: `fly logs`. Redeploy after a push: `fly deploy`.
+
+---
+
+## Option B — Render (free)
 
 Render reads [`render.yaml`](render.yaml) and provisions everything: the Docker
 web service and a managed Postgres (which supports `pgvector`). ~10 minutes.
@@ -43,7 +103,7 @@ frontend service, no `VITE_API_URL`, and no CORS to configure.
 
 ---
 
-## Option B — Railway (paid)
+## Option C — Railway (paid)
 
 Railway is smooth but its free trial is one-time; once it's "maxed out" you must
 add a card (Hobby plan, ~$5/mo usage-based).

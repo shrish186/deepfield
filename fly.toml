@@ -1,0 +1,32 @@
+# Fly.io config for the single-service Deepfield image (backend serves the
+# bundled frontend). The database is external (Neon) — set DATABASE_URL and the
+# API keys as secrets:  fly secrets set KEY=value
+#
+# App names are globally unique on Fly. If "deepfield" is taken, change `app`
+# below (or let `fly launch` pick one and copy it here).
+
+app = "deepfield"
+primary_region = "iad"   # pick the region closest to you (e.g. sjc, lhr)
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Non-secret runtime config. Secrets (keys + DATABASE_URL) go via `fly secrets`.
+[env]
+  PORT = "8000"
+  DEEPFIELD_ENV = "production"
+  DEEPFIELD_FREE_DEEP_RUNS = "3"
+  DEEPFIELD_GLOBAL_DAILY_DEEP_RUNS = "50"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Scale to zero when idle to stay within the free allowance; wakes on the next
+  # request (Fly cold starts are fast). Set min_machines_running = 1 for always-on.
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
